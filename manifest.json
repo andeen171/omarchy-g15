@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "andeen171.g15",
+  "name": "G15 sensors",
+  "version": "0.2.0",
+  "author": "andeen171",
+  "license": "MIT",
+  "description": "Dell G15 CPU/GPU temps, fan rpm and power mode in the Omarchy bar; click opens the g15 TUI.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "Widget.qml" },
+  "barWidget": {
+    "displayName": "G15",
+    "description": "Reads `g15 waybar` (hwmon + state file only, never the USB device).",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "left",
+    "defaults": {
+      "interval": 5,
+      "onClick": "omarchy-launch-or-focus-tui g15-tui"
+    },
+    "schema": [
+      { "key": "interval", "type": "integer", "label": "Refresh interval (seconds)", "min": 1, "max": 60, "step": 1, "defaultValue": 5 },
+      { "key": "onClick", "type": "string", "label": "Click command", "defaultValue": "omarchy-launch-or-focus-tui g15-tui" }
+    ]
+  }
+}
