@@ -1,26 +1,56 @@
 {
   "schemaVersion": 1,
-  "id": "andeen171.g15",
-  "name": "G15 sensors",
-  "version": "0.2.0",
+  "id": "io.github.andeen171.g15",
+  "name": "G15",
+  "version": "0.3.0",
   "author": "andeen171",
   "license": "MIT",
-  "description": "Dell G15 CPU/GPU temps, fan rpm and power mode in the Omarchy bar; click opens the g15 TUI.",
+  "description": "Dell G15 CPU/GPU temps and fan rpm in the Omarchy bar, with a panel for power modes and the RGB keyboard backlight.",
   "kinds": ["bar-widget"],
-  "entryPoints": { "barWidget": "Widget.qml" },
+  "entryPoints": { "barWidget": "Panel.qml" },
   "barWidget": {
     "displayName": "G15",
-    "description": "Reads `g15 waybar` (hwmon + state file only, never the USB device).",
+    "description": "Temps and fans in the bar; click for power modes and keyboard-light controls. Needs the `g15` CLI (github.com/andeen171/g15-cli).",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "left",
     "defaults": {
-      "interval": 5,
-      "onClick": "omarchy-launch-or-focus-tui g15-tui"
+      "refreshIntervalSec": 5,
+      "showValues": true,
+      "powerCommand": "sudo -n g15 power",
+      "tuiCommand": "omarchy-launch-or-focus-tui g15-tui"
     },
     "schema": [
-      { "key": "interval", "type": "integer", "label": "Refresh interval (seconds)", "min": 1, "max": 60, "step": 1, "defaultValue": 5 },
-      { "key": "onClick", "type": "string", "label": "Click command", "defaultValue": "omarchy-launch-or-focus-tui g15-tui" }
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 5
+      },
+      {
+        "key": "showValues",
+        "type": "boolean",
+        "label": "Show temperatures in the bar",
+        "defaultValue": true,
+        "description": "Off shows the keyboard glyph instead; the panel still has everything."
+      },
+      {
+        "key": "powerCommand",
+        "type": "string",
+        "label": "Power mode command",
+        "defaultValue": "sudo -n g15 power",
+        "description": "Prefixed to the mode name. Switching modes needs root — see the plugin README for the sudoers line."
+      },
+      {
+        "key": "tuiCommand",
+        "type": "string",
+        "label": "TUI command",
+        "defaultValue": "omarchy-launch-or-focus-tui g15-tui",
+        "description": "Run by right-clicking the widget or the panel's Open TUI button."
+      }
     ]
   }
 }
