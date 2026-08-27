@@ -5,8 +5,8 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 
-// G15 — Dell G15 temps and fans in the bar, with a panel for the two things
-// the TUI is otherwise needed for: power mode and keyboard backlight.
+// G15 — Dell G15 temps and fans in the bar, with a panel carrying everything
+// the TUI controls: power mode, fan boost, and the keyboard backlight.
 //
 // Reads go through `g15 status` (hwmon + ~/.config/g15/state only, never the
 // USB device), so polling can never wedge the AW-ELC controller. Writes go
@@ -19,8 +19,10 @@ Panel {
   readonly property int refreshIntervalSec: Math.max(1, Math.min(60, setting("refreshIntervalSec", 5)))
   readonly property bool showValues: setting("showValues", true) === true
   // Power modes and fan boost go through WMAX, which needs root; LED control
-  // does not. See README for the sudoers lines this default expects.
-  readonly property string rootCommand: setting("rootCommand", "sudo -n g15")
+  // does not. pkexec hands that to the desktop's polkit agent — the shell's own
+  // password dialog — so nothing has to be whitelisted in sudoers. Point this
+  // at `sudo -n g15` instead if a passwordless rule is what you want.
+  readonly property string rootCommand: setting("rootCommand", "pkexec /usr/bin/g15")
   readonly property string tuiCommand: setting("tuiCommand", "omarchy-launch-or-focus-tui g15-tui")
 
   property var status: Model.emptyStatus()
@@ -597,40 +599,6 @@ Panel {
           }
         }
 
-        PanelSeparator { foreground: root.foreground }
-
-        // ---------- Footer ----------
-        Item {
-          width: parent.width
-          implicitHeight: tuiButton.implicitHeight
-
-          Text {
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Same controls, in a terminal"
-            color: root.foreground
-            opacity: 0.5
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-          }
-
-          Button {
-            id: tuiButton
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Open TUI"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            fontSize: Style.font.bodySmall
-            horizontalPadding: Style.spacing.controlPaddingX
-            verticalPadding: Style.spacing.controlPaddingY
-            bordered: true
-            onClicked: {
-              root.bar.run(root.tuiCommand)
-              root.close()
-            }
-          }
-        }
       }
     }
   }

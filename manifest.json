@@ -17,7 +17,7 @@
     "defaults": {
       "refreshIntervalSec": 5,
       "showValues": true,
-      "rootCommand": "sudo -n g15",
+      "rootCommand": "pkexec /usr/bin/g15",
       "tuiCommand": "omarchy-launch-or-focus-tui g15-tui"
     },
     "schema": [
@@ -41,8 +41,8 @@
         "key": "rootCommand",
         "type": "string",
         "label": "Privileged g15 command",
-        "defaultValue": "sudo -n g15",
-        "description": "Prefixed to `power <mode>` and `fan boost <n>`, which need root — see the plugin README for the sudoers lines."
+        "defaultValue": "pkexec /usr/bin/g15",
+        "description": "Prefixed to `power <mode>` and `fan boost <n>`, which need root. pkexec asks for a password through the shell's polkit dialog; `sudo -n g15` works too if you would rather whitelist it."
       },
       {
         "key": "tuiCommand",

@@ -23,8 +23,8 @@ The widget only ever runs:
 | Action | Command |
 |---|---|
 | poll | `g15 status` |
-| power mode | `sudo -n g15 power <mode>` (configurable) |
-| fan boost | `sudo -n g15 fan boost <0-100>` (same setting) |
+| power mode | `pkexec /usr/bin/g15 power <mode>` (configurable) |
+| fan boost | `pkexec /usr/bin/g15 fan boost <0-100>` (same setting) |
 | brightness | `g15 led brightness <0-100>` |
 | effect | `g15 led effect <name>` |
 | speed | `g15 led speed <1-10>` |
@@ -58,10 +58,32 @@ and `rescanPlugins` after pulling.
 
 ## Privileges
 
-Reading needs nothing. LED writes go over USB and need only the udev rule the
-CLI ships. **Power modes and fan boost need root** (they go through the
-`acpi_call` WMI), so those controls shell out through `sudo`. Grant it
-passwordless:
+Reading needs nothing — temperatures, fan speeds **and the current fan boost**
+all come from hwmon, and the rest from `~/.config/g15/state`. LED writes go
+over USB and need only the udev rule the CLI ships.
+
+**Power modes and fan boost need root** (they go through the `acpi_call` WMI),
+so those two controls run through `pkexec`. The Omarchy shell is a polkit
+agent, so that surfaces as its own password dialog — nothing has to be
+whitelisted in sudoers, and the authorization is asked for at the moment it is
+used rather than granted forever.
+
+Install the action the CLI ships (the `g15-cli` package does this for you) so
+the prompt names what it is about to do and caches for a few minutes instead of
+asking once per slider drag:
+
+```sh
+sudo install -Dm644 org.andeen171.g15.policy \
+  /usr/share/polkit-1/actions/org.andeen171.g15.policy
+pkaction --action-id org.andeen171.g15.control --verbose
+```
+
+Without it `pkexec` still works, falling back to
+`org.freedesktop.policykit.exec` — which prompts every single time and names
+the binary rather than the operation.
+
+Prefer a passwordless setup? Point the widget's `rootCommand` setting at
+`sudo -n g15` and add the sudoers entries yourself:
 
 ```sh
 sudo tee /etc/sudoers.d/g15-panel <<EOF
@@ -71,13 +93,8 @@ EOF
 sudo chmod 440 /etc/sudoers.d/g15-panel
 ```
 
-Without those lines the chips and the boost slider are inert — `sudo -n` fails
-silently. Point `rootCommand` at `doas` or a wrapper of your own in the widget
-settings if you prefer.
-
-Both values come from `~/.config/g15/state`, because reading the live ones
-needs root too. They show what was last set through `g15`, so a mode change
-that moves the fans on its own is not reflected in the boost slider.
+Either way, if the privileged call fails the control simply snaps back to the
+real value on the next poll.
 
 ## Developing
 
