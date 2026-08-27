@@ -18,9 +18,9 @@ Panel {
 
   readonly property int refreshIntervalSec: Math.max(1, Math.min(60, setting("refreshIntervalSec", 5)))
   readonly property bool showValues: setting("showValues", true) === true
-  // Power and fan control need root; LED control does not. See README for the
-  // sudoers line this default expects.
-  readonly property string powerCommand: setting("powerCommand", "sudo -n g15 power")
+  // Power modes and fan boost go through WMAX, which needs root; LED control
+  // does not. See README for the sudoers lines this default expects.
+  readonly property string rootCommand: setting("rootCommand", "sudo -n g15")
   readonly property string tuiCommand: setting("tuiCommand", "omarchy-launch-or-focus-tui g15-tui")
 
   property var status: Model.emptyStatus()
@@ -64,10 +64,14 @@ Panel {
     actionProc.running = true
   }
 
+  // rootCommand is a user-editable setting (sudo wrapper, doas, ...), so these
+  // build a shell string; the arguments are ours, never the state file's.
   function setPower(mode) {
-    // powerCommand is a user-editable setting (sudo wrapper, doas, ...), so it
-    // is a shell string; `mode` only ever comes from Model.powerOptions().
-    apply_argv(["bash", "-lc", root.powerCommand + " " + mode])
+    apply_argv(["bash", "-lc", root.rootCommand + " power " + mode])
+  }
+
+  function setBoost(percent) {
+    apply_argv(["bash", "-lc", root.rootCommand + " fan boost " + Math.round(percent)])
   }
 
   function setEffect(name) {
@@ -255,7 +259,7 @@ Panel {
           spacing: Style.space(10)
 
           PanelSectionHeader {
-            text: "POWER MODE"
+            text: "POWER & FANS"
             foreground: root.foreground
             fontFamily: root.fontFamily
           }
@@ -270,6 +274,21 @@ Panel {
             fontSize: Style.font.caption
             focusable: false
             onChanged: function(v) { root.setPower(v) }
+          }
+
+          SliderRow {
+            width: parent.width
+            label: Model.fanIcon()
+            minimum: 0
+            maximum: 100
+            step: 5
+            value: root.status.boost
+            suffix: "%"
+            // The mode chips drive the fan curve; this is the manual boost on
+            // top of it. Shown from the state file — reading the live value
+            // needs root, so it tracks what was last set, not what a mode
+            // change did to the fans.
+            onCommitted: function(v) { root.setBoost(v) }
           }
 
           Text {
@@ -588,7 +607,7 @@ Panel {
           Text {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            text: "Fan boost, live sensors"
+            text: "Same controls, in a terminal"
             color: root.foreground
             opacity: 0.5
             font.family: root.fontFamily

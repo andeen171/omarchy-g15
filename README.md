@@ -6,12 +6,14 @@ the power mode and the RGB keyboard backlight.
 
 - **Bar:** `󰍛 54°  󰢮 53°`, tooltip with both fan speeds and the current power mode.
 - **Panel (left click):** temperature meters, power-mode chips
-  (quiet / balanced / performance / G-Mode), and the full keyboard backlight:
+  (quiet / balanced / performance / G-Mode), a fan-boost slider, and the full
+  keyboard backlight:
   brightness, effect (static / pulse / morph / cycle / rainbow), speed, and the
   effect's color list — click a swatch for an HSV picker with presets, a hex
   field, and a screen eyedropper. `+` / `−` grow and shrink the list within the
   limits the firmware fixes per effect (cycle and rainbow take up to 8).
-- **Right click:** opens the `g15` TUI, which still owns fan boost.
+- **Right click:** opens the `g15` TUI, for a keyboard-driven version of the
+  same controls.
 
 ## Requires
 
@@ -22,6 +24,7 @@ The widget only ever runs:
 |---|---|
 | poll | `g15 status` |
 | power mode | `sudo -n g15 power <mode>` (configurable) |
+| fan boost | `sudo -n g15 fan boost <0-100>` (same setting) |
 | brightness | `g15 led brightness <0-100>` |
 | effect | `g15 led effect <name>` |
 | speed | `g15 led speed <1-10>` |
@@ -56,16 +59,25 @@ and `rescanPlugins` after pulling.
 ## Privileges
 
 Reading needs nothing. LED writes go over USB and need only the udev rule the
-CLI ships. **Switching the power mode needs root** (`acpi_call` WMI), so the
-panel's chips shell out through `sudo`. Grant it passwordless:
+CLI ships. **Power modes and fan boost need root** (they go through the
+`acpi_call` WMI), so those controls shell out through `sudo`. Grant it
+passwordless:
 
 ```sh
-echo "$USER ALL=(root) NOPASSWD: /usr/bin/g15 power *" | sudo tee /etc/sudoers.d/g15-power
+sudo tee /etc/sudoers.d/g15-panel <<EOF
+$USER ALL=(root) NOPASSWD: /usr/bin/g15 power *
+$USER ALL=(root) NOPASSWD: /usr/bin/g15 fan boost *
+EOF
+sudo chmod 440 /etc/sudoers.d/g15-panel
 ```
 
-Without that line the chips are inert (sudo -n fails silently) and the mode
-shown is whatever the CLI last recorded. Point `powerCommand` at `doas` or a
-wrapper of your own in the widget settings if you prefer.
+Without those lines the chips and the boost slider are inert — `sudo -n` fails
+silently. Point `rootCommand` at `doas` or a wrapper of your own in the widget
+settings if you prefer.
+
+Both values come from `~/.config/g15/state`, because reading the live ones
+needs root too. They show what was last set through `g15`, so a mode change
+that moves the fans on its own is not reflected in the boost slider.
 
 ## Developing
 

@@ -10,14 +10,14 @@
   "entryPoints": { "barWidget": "Panel.qml" },
   "barWidget": {
     "displayName": "G15",
-    "description": "Temps and fans in the bar; click for power modes and keyboard-light controls. Needs the `g15` CLI (github.com/andeen171/g15-cli).",
+    "description": "Temps and fans in the bar; click for power modes, fan boost and the keyboard backlight. Needs the `g15` CLI (github.com/andeen171/g15-cli).",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "left",
     "defaults": {
       "refreshIntervalSec": 5,
       "showValues": true,
-      "powerCommand": "sudo -n g15 power",
+      "rootCommand": "sudo -n g15",
       "tuiCommand": "omarchy-launch-or-focus-tui g15-tui"
     },
     "schema": [
@@ -38,11 +38,11 @@
         "description": "Off shows the keyboard glyph instead; the panel still has everything."
       },
       {
-        "key": "powerCommand",
+        "key": "rootCommand",
         "type": "string",
-        "label": "Power mode command",
-        "defaultValue": "sudo -n g15 power",
-        "description": "Prefixed to the mode name. Switching modes needs root — see the plugin README for the sudoers line."
+        "label": "Privileged g15 command",
+        "defaultValue": "sudo -n g15",
+        "description": "Prefixed to `power <mode>` and `fan boost <n>`, which need root — see the plugin README for the sudoers lines."
       },
       {
         "key": "tuiCommand",

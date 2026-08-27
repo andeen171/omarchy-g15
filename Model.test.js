@@ -14,6 +14,7 @@ assert.strictEqual(parseStatus("[1,2]").sensors, false)
 // A hostile state file cannot smuggle a color into the swatch.
 assert.strictEqual(parseStatus('{"color":"red; rm -rf /"}').color, "#ffffff")
 assert.strictEqual(parseStatus('{"brightness":900}').brightness, 100)
+assert.strictEqual(parseStatus('{"boost":-5}').boost, 0)
 assert.deepStrictEqual(parseStatus('{"colors":["ff0000","nope"]}').colors, ["#ff0000"])
 
 // HSV is what the picker edits, hex is what the CLI takes.
