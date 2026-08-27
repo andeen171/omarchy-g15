@@ -25,6 +25,19 @@ Panel {
 
   property var status: Model.emptyStatus()
 
+  // Which swatch the picker edits, and the picker's live HSV. The HSV is only
+  // seeded when the picker opens: binding it to `status` would yank the sliders
+  // out from under a drag on every poll.
+  property int selectedColor: 0
+  property bool pickerOpen: false
+  property real pickH: 0
+  property real pickS: 100
+  property real pickV: 100
+  readonly property string pickHex: Model.hsvToHex(pickH, pickS, pickV)
+
+  readonly property bool canAdd: status.colors.length < status.maxColors
+  readonly property bool canRemove: status.colors.length > status.minColors
+
   readonly property bool readoutsVisible: !button.vertical && showValues && status.sensors
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
@@ -38,6 +51,9 @@ Panel {
     // A failed read (g15 upgrading, hwmon module reloading) must not blank the
     // bar — keep the last good sample.
     if (parsed) status = parsed
+    // Effects hold different-length lists; a switch must not leave the
+    // selection pointing past the end.
+    if (selectedColor >= status.colors.length) selectedColor = 0
   }
 
   // Every write is an argv vector, never a shell string, so nothing read from
@@ -55,7 +71,53 @@ Panel {
   }
 
   function setEffect(name) {
+    pickerOpen = false
+    selectedColor = 0
     apply_argv(["g15", "led", "effect", name])
+  }
+
+  function setSpeed(value) {
+    apply_argv(["g15", "led", "speed", String(Math.round(value))])
+  }
+
+  // The CLI takes the whole list and enforces the per-effect min/max itself,
+  // so every edit here is a rewrite of the current effect's list.
+  function setColors(list) {
+    apply_argv(["g15", "led", "colors", Model.colorArg(list)])
+  }
+
+  function openPicker(index) {
+    selectedColor = index
+    var hsv = Model.hexToHsv(status.colors[index])
+    pickH = hsv.h
+    pickS = hsv.s
+    pickV = hsv.v
+    pickerOpen = true
+  }
+
+  function commitHex(hex) {
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return
+    var list = status.colors.slice()
+    if (selectedColor >= list.length) return
+    if (list[selectedColor] === hex.toLowerCase()) return
+    list[selectedColor] = hex
+    setColors(list)
+  }
+
+  function addColor() {
+    if (!canAdd) return
+    var list = status.colors.slice()
+    list.splice(selectedColor + 1, 0, list[selectedColor])
+    selectedColor = selectedColor + 1
+    setColors(list)
+  }
+
+  function removeColor() {
+    if (!canRemove) return
+    var list = status.colors.slice()
+    list.splice(selectedColor, 1)
+    selectedColor = Math.max(0, Math.min(selectedColor, list.length - 1))
+    setColors(list)
   }
 
   function setBrightness(percent) {
@@ -76,6 +138,26 @@ Panel {
     // The CLI writes the state file before exiting, so the next read already
     // reflects the change.
     onExited: root.refresh()
+  }
+
+  // hyprpicker overlays the screen and prints the color it is clicked on. The
+  // shell already runs as the user, so unlike the TUI this needs no env
+  // reconstruction.
+  Process {
+    id: pickProc
+    command: ["hyprpicker", "--format=hex"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var hex = String(text || "").trim().toLowerCase()
+        if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return
+        var hsv = Model.hexToHsv(hex)
+        root.pickH = hsv.h
+        root.pickS = hsv.s
+        root.pickV = hsv.v
+        root.commitHex(hex)
+      }
+    }
   }
 
   Timer {
@@ -215,53 +297,17 @@ Panel {
             fontFamily: root.fontFamily
           }
 
-          Item {
+          SliderRow {
             width: parent.width
-            implicitHeight: Math.max(swatch.height, brightness.implicitHeight, brightnessValue.implicitHeight)
-
-            Rectangle {
-              id: swatch
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
-              width: Style.space(14)
-              height: width
-              radius: Style.cornerRadius > 0 ? width / 2 : 0
-              color: root.status.color
-              opacity: root.status.brightness > 0 ? 1 : 0.3
-              border.width: 1
-              border.color: Util.alpha(root.foreground, 0.3)
-            }
-
-            PanelSlider {
-              id: brightness
-              anchors.left: swatch.right
-              anchors.leftMargin: Style.space(10)
-              anchors.right: brightnessValue.left
-              anchors.rightMargin: Style.space(10)
-              anchors.verticalCenter: parent.verticalCenter
-              bar: root.bar
-              minimum: 0
-              maximum: 100
-              step: 5
-              integer: true
-              value: root.status.brightness
-              // Applied on release, not on every drag tick: each write is a USB
-              // control transfer to the LED controller, and the CLI persists
-              // state on each one.
-              onReleased: function(v) { root.setBrightness(v) }
-            }
-
-            Text {
-              id: brightnessValue
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              text: Math.round(brightness.liveValue) + "%"
-              color: root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              horizontalAlignment: Text.AlignRight
-              width: Style.space(34)
-            }
+            label: "󰃟"
+            minimum: 0
+            maximum: 100
+            step: 5
+            value: root.status.brightness
+            suffix: "%"
+            // Applied on release, not on every drag tick: each write is a USB
+            // control transfer to the LED controller.
+            onCommitted: function(v) { root.setBrightness(v) }
           }
 
           ButtonGroup {
@@ -276,14 +322,259 @@ Panel {
             onChanged: function(v) { root.setEffect(v) }
           }
 
-          Text {
+          SliderRow {
             width: parent.width
-            text: "Effects reuse the colors last set from the TUI or CLI."
-            color: root.foreground
-            opacity: 0.5
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-            wrapMode: Text.WordWrap
+            visible: Model.hasSpeed(root.status.effect)
+            label: "󰓅"
+            minimum: 1
+            maximum: 10
+            step: 1
+            integer: true
+            value: root.status.speed
+            onCommitted: function(v) { root.setSpeed(v) }
+          }
+
+          // ---------- Colors ----------
+          Item {
+            width: parent.width
+            implicitHeight: Math.max(colorsHeader.implicitHeight, colorButtons.implicitHeight)
+
+            PanelSectionHeader {
+              id: colorsHeader
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              text: "COLORS"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            Text {
+              anchors.left: colorsHeader.right
+              anchors.leftMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              // The firmware fixes how many colors each effect blends, so the
+              // ceiling is worth showing next to the count.
+              text: root.status.colors.length + "/" + root.status.maxColors
+              color: root.foreground
+              opacity: 0.5
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+
+            Row {
+              id: colorButtons
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(4)
+
+              PanelActionButton {
+                iconText: "+"
+                tooltipText: root.canAdd ? "Duplicate the selected color"
+                                         : root.status.effect + " takes at most " + root.status.maxColors
+                enabled: root.canAdd
+                opacity: enabled ? 1 : 0.35
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                onClicked: root.addColor()
+              }
+
+              PanelActionButton {
+                iconText: "\u2212"
+                tooltipText: root.canRemove ? "Remove the selected color"
+                                            : root.status.effect + " needs at least " + root.status.minColors
+                enabled: root.canRemove
+                opacity: enabled ? 1 : 0.35
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                onClicked: root.removeColor()
+              }
+            }
+          }
+
+          Flow {
+            width: parent.width
+            spacing: Style.space(6)
+
+            Repeater {
+              model: root.status.colors
+
+              delegate: Rectangle {
+                required property var modelData
+                required property int index
+
+                width: Style.space(30)
+                height: Style.space(22)
+                radius: Style.cornerRadius > 0 ? Style.space(4) : 0
+                color: modelData
+                border.width: index === root.selectedColor ? Math.max(2, Style.space(2)) : 1
+                border.color: index === root.selectedColor
+                  ? root.foreground
+                  : Util.alpha(root.foreground, 0.3)
+
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.PointingHandCursor
+                  // Clicking the open swatch again closes the picker, so the
+                  // row doubles as the picker's toggle.
+                  onClicked: {
+                    if (root.pickerOpen && root.selectedColor === index) root.pickerOpen = false
+                    else root.openPicker(index)
+                  }
+                }
+              }
+            }
+          }
+
+          // ---------- Picker, open on a swatch click ----------
+          Column {
+            width: parent.width
+            visible: root.pickerOpen
+            spacing: Style.space(8)
+
+            Flow {
+              width: parent.width
+              spacing: Style.space(6)
+
+              Repeater {
+                model: Model.presets()
+
+                delegate: Rectangle {
+                  required property var modelData
+
+                  width: Style.space(18)
+                  height: width
+                  radius: Style.cornerRadius > 0 ? width / 2 : 0
+                  color: modelData
+                  border.width: 1
+                  border.color: Util.alpha(root.foreground, 0.3)
+
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                      var hsv = Model.hexToHsv(modelData)
+                      root.pickH = hsv.h
+                      root.pickS = hsv.s
+                      root.pickV = hsv.v
+                      root.commitHex(modelData)
+                    }
+                  }
+                }
+              }
+            }
+
+            SliderRow {
+              width: parent.width
+              label: "Hue"
+              minimum: 0
+              maximum: 359
+              step: 1
+              integer: true
+              value: root.pickH
+              suffix: "°"
+              onLive: function(v) { root.pickH = v }
+              onCommitted: function(v) { root.commitHex(root.pickHex) }
+            }
+
+            SliderRow {
+              width: parent.width
+              label: "Sat"
+              minimum: 0
+              maximum: 100
+              step: 1
+              integer: true
+              value: root.pickS
+              suffix: "%"
+              onLive: function(v) { root.pickS = v }
+              onCommitted: function(v) { root.commitHex(root.pickHex) }
+            }
+
+            SliderRow {
+              width: parent.width
+              label: "Val"
+              minimum: 0
+              maximum: 100
+              step: 1
+              integer: true
+              value: root.pickV
+              suffix: "%"
+              onLive: function(v) { root.pickV = v }
+              onCommitted: function(v) { root.commitHex(root.pickHex) }
+            }
+
+            Item {
+              width: parent.width
+              implicitHeight: Math.max(hexField.implicitHeight, pickerButtons.implicitHeight)
+
+              Rectangle {
+                id: preview
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(18)
+                height: width
+                radius: Style.cornerRadius > 0 ? width / 2 : 0
+                color: root.pickHex
+                border.width: 1
+                border.color: Util.alpha(root.foreground, 0.3)
+              }
+
+              TextField {
+                id: hexField
+                anchors.left: preview.right
+                anchors.leftMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(90)
+                foreground: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                verticalPadding: Style.space(4)
+                placeholderText: root.pickHex
+                validator: RegularExpressionValidator { regularExpression: /#?[0-9a-fA-F]{0,6}/ }
+                onAccepted: {
+                  var hex = text.charAt(0) === "#" ? text : "#" + text
+                  if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+                    var hsv = Model.hexToHsv(hex)
+                    root.pickH = hsv.h
+                    root.pickS = hsv.s
+                    root.pickV = hsv.v
+                    root.commitHex(hex)
+                    text = ""
+                  }
+                }
+              }
+
+              Row {
+                id: pickerButtons
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.space(6)
+
+                Button {
+                  text: "Screen"
+                  tooltipText: "Pick a color from the screen (hyprpicker)"
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.caption
+                  horizontalPadding: Style.spacing.controlPaddingX
+                  verticalPadding: Style.space(4)
+                  bordered: true
+                  onClicked: if (!pickProc.running) pickProc.running = true
+                }
+
+                Button {
+                  text: "Done"
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.caption
+                  horizontalPadding: Style.spacing.controlPaddingX
+                  verticalPadding: Style.space(4)
+                  bordered: true
+                  onClicked: root.pickerOpen = false
+                }
+              }
+            }
           }
         }
 
@@ -297,7 +588,7 @@ Panel {
           Text {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            text: "Colors, per-zone control"
+            text: "Fan boost, live sensors"
             color: root.foreground
             opacity: 0.5
             font.family: root.fontFamily
@@ -322,6 +613,66 @@ Panel {
           }
         }
       }
+    }
+  }
+
+  // A labeled slider with its value at the end. `onLive` fires while dragging
+  // (the picker previews with it); `onCommitted` fires on release only, so one
+  // gesture is one USB write.
+  component SliderRow: Item {
+    id: sliderRow
+
+    property string label: ""
+    property string suffix: ""
+    property real value: 0
+    property real minimum: 0
+    property real maximum: 100
+    property real step: 1
+    property bool integer: false
+
+    signal live(real value)
+    signal committed(real value)
+
+    implicitHeight: Math.max(sliderLabel.implicitHeight, slider.implicitHeight, sliderValue.implicitHeight)
+
+    Text {
+      id: sliderLabel
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      width: Style.space(30)
+      text: sliderRow.label
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
+    }
+
+    PanelSlider {
+      id: slider
+      anchors.left: sliderLabel.right
+      anchors.leftMargin: Style.space(4)
+      anchors.right: sliderValue.left
+      anchors.rightMargin: Style.space(10)
+      anchors.verticalCenter: parent.verticalCenter
+      bar: root.bar
+      minimum: sliderRow.minimum
+      maximum: sliderRow.maximum
+      step: sliderRow.step
+      integer: sliderRow.integer
+      value: sliderRow.value
+      onMoved: function(v) { sliderRow.live(v) }
+      onReleased: function(v) { sliderRow.committed(v) }
+    }
+
+    Text {
+      id: sliderValue
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      width: Style.space(34)
+      horizontalAlignment: Text.AlignRight
+      text: Math.round(slider.liveValue) + sliderRow.suffix
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
     }
   }
 

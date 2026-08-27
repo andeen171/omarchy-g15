@@ -5,10 +5,13 @@ bar, with a panel for the two things you would otherwise open a terminal for:
 the power mode and the RGB keyboard backlight.
 
 - **Bar:** `󰍛 54°  󰢮 53°`, tooltip with both fan speeds and the current power mode.
-- **Panel (left click):** temperature meters, power mode chips
-  (quiet / balanced / performance / G-Mode), keyboard brightness slider and
-  effect chips (static / pulse / morph / cycle / rainbow).
-- **Right click:** opens the full `g15` TUI, where per-zone colors live.
+- **Panel (left click):** temperature meters, power-mode chips
+  (quiet / balanced / performance / G-Mode), and the full keyboard backlight:
+  brightness, effect (static / pulse / morph / cycle / rainbow), speed, and the
+  effect's color list — click a swatch for an HSV picker with presets, a hex
+  field, and a screen eyedropper. `+` / `−` grow and shrink the list within the
+  limits the firmware fixes per effect (cycle and rainbow take up to 8).
+- **Right click:** opens the `g15` TUI, which still owns fan boost.
 
 ## Requires
 
@@ -21,25 +24,34 @@ The widget only ever runs:
 | power mode | `sudo -n g15 power <mode>` (configurable) |
 | brightness | `g15 led brightness <0-100>` |
 | effect | `g15 led effect <name>` |
+| speed | `g15 led speed <1-10>` |
+| colors | `g15 led colors RRGGBB[,RRGGBB...]` |
+| eyedropper | `hyprpicker --format=hex` |
+
+`hyprpicker` is optional — without it the picker's *Screen* button does
+nothing, and everything else still works.
 
 Polling reads hwmon and `~/.config/g15/state` only — never the USB LED device,
 which must not be opened concurrently.
 
 ## Install
 
-```sh
-omarchy plugin add https://github.com/andeen171/g15-cli.git --enable
-```
+This plugin lives in a subdirectory of the [g15-cli](https://github.com/andeen171/g15-cli)
+repo, so `omarchy plugin add <repo-url>` does **not** work on it — that command
+expects the repository root to be the plugin. Install by copy (the shell only
+loads plugins from `~/.config/omarchy/plugins/`, and refuses symlinked plugin
+directories):
 
-or, from a clone of the g15-cli repo (the shell refuses symlinked plugin dirs,
-so this is a copy):
-
 ```sh
-cp -r omarchy-plugin ~/.config/omarchy/plugins/io.github.andeen171.g15
+git clone https://github.com/andeen171/g15-cli.git
+cp -r g15-cli/omarchy-plugin ~/.config/omarchy/plugins/io.github.andeen171.g15
 omarchy plugin validate ~/.config/omarchy/plugins/io.github.andeen171.g15
 omarchy-shell shell rescanPlugins
 omarchy plugin enable io.github.andeen171.g15 left
 ```
+
+Because it is a copy, `git pull` does not update the widget — re-run the `cp`
+and `rescanPlugins` after pulling.
 
 ## Privileges
 
@@ -54,6 +66,60 @@ echo "$USER ALL=(root) NOPASSWD: /usr/bin/g15 power *" | sudo tee /etc/sudoers.d
 Without that line the chips are inert (sudo -n fails silently) and the mode
 shown is whatever the CLI last recorded. Point `powerCommand` at `doas` or a
 wrapper of your own in the widget settings if you prefer.
+
+## Developing
+
+Edits to a plugin's QML are **not** picked up by a running shell, whatever
+`omarchy-shell shell rescanPlugins` and the plugin's own reload log line
+suggest — neither a rescan nor a disable/enable cycle rebuilds the loaded
+component. After editing, run:
+
+```sh
+omarchy restart shell
+omarchy plugin validate ~/.config/omarchy/plugins/io.github.andeen171.g15
+qmllint -I /usr/share/omarchy/shell Panel.qml
+node Model.test.js
+qs log -p /usr/share/omarchy/shell --tail 100   # QML errors land here
+```
+
+`omarchy-shell shell summon io.github.andeen171.g15 '{}'` opens the panel
+without clicking the bar, which is handy for screenshotting a state.
+
+## Packaging: why this is not its own repo yet
+
+Deliberate, for now. The widget and the CLI ship one contract (`g15 status`,
+`g15 led effect`, …), and while both are changing every commit, keeping them in
+one repo means one commit, one PR, and one place where a contract break shows
+up. The cost is the copy-install above and no marketplace listing.
+
+Everything else is already publish-shaped: reverse-DNS id, no `clonedFrom` in
+the manifest, its own README and LICENSE, no files referenced outside this
+directory. When the contract settles, splitting it out is:
+
+```sh
+git subtree split --prefix omarchy-plugin -b g15-omarchy-plugin
+# push that branch as the root of a new repo, then
+omarchy plugin add https://github.com/andeen171/omarchy-g15.git --enable
+```
+
+Nothing inside the plugin changes; only the repo's README install steps and the
+version handshake (the plugin would then declare a minimum `g15` CLI version
+rather than moving in lockstep with it). Submission after that is the
+[marketplace issue template](https://github.com/HANCORE-linux/omarchy-plugin-marketplace),
+which wants the external dependency (the `g15` CLI), the privilege boundary
+(sudo for power modes), and a `preview.png`.
+
+## History
+
+`Widget.qml` (plugin `andeen171.g15`, g15-cli 0.2.0) was the first version: a
+`BarWidget` that polled `g15 waybar` for a text label and ran the TUI on click,
+a straight port of the Waybar custom module Omarchy 3 used before the shell
+replaced Waybar. It is gone from the working tree — `git show <ref>:omarchy-plugin/Widget.qml`
+— because `Panel.qml` is a superset: same readout, same click-to-TUI (now on
+right click), plus the controls. The old widget stays in the repo history as
+the minimal example of a `bar-widget` plugin, and the plain `shell.json`
+command-module fallback for it is still documented in the
+[main README](../README.md).
 
 ## License
 
