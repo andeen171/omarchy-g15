@@ -40,6 +40,25 @@ Panel {
   readonly property bool canAdd: status.colors.length < status.maxColors
   readonly property bool canRemove: status.colors.length > status.minColors
 
+  // What we just asked for, shown until the poll that follows the command
+  // lands. Without it a control snaps back to the old value for the moment
+  // between releasing the slider and the next `g15 status` — and with pkexec
+  // that moment lasts as long as the password prompt is up.
+  property real pendingBrightness: -1
+  property real pendingSpeed: -1
+  property real pendingBoost: -1
+  property string pendingPower: ""
+  property string pendingEffect: ""
+  property bool awaitingRefresh: false
+
+  function clearPending() {
+    pendingBrightness = -1
+    pendingSpeed = -1
+    pendingBoost = -1
+    pendingPower = ""
+    pendingEffect = ""
+  }
+
   readonly property bool readoutsVisible: !button.vertical && showValues && status.sensors
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
@@ -56,6 +75,13 @@ Panel {
     // Effects hold different-length lists; a switch must not leave the
     // selection pointing past the end.
     if (selectedColor >= status.colors.length) selectedColor = 0
+    // This is the read that follows a write, so it either confirms what we
+    // asked for or shows that the command failed. Either way it is the truth
+    // now, and the optimistic values step aside.
+    if (awaitingRefresh) {
+      awaitingRefresh = false
+      clearPending()
+    }
   }
 
   // Every write is an argv vector, never a shell string, so nothing read from
@@ -69,21 +95,25 @@ Panel {
   // rootCommand is a user-editable setting (sudo wrapper, doas, ...), so these
   // build a shell string; the arguments are ours, never the state file's.
   function setPower(mode) {
+    pendingPower = mode
     apply_argv(["bash", "-lc", root.rootCommand + " power " + mode])
   }
 
   function setBoost(percent) {
-    apply_argv(["bash", "-lc", root.rootCommand + " fan boost " + Math.round(percent)])
+    pendingBoost = Math.round(percent)
+    apply_argv(["bash", "-lc", root.rootCommand + " fan boost " + pendingBoost])
   }
 
   function setEffect(name) {
     pickerOpen = false
     selectedColor = 0
+    pendingEffect = name
     apply_argv(["g15", "led", "effect", name])
   }
 
   function setSpeed(value) {
-    apply_argv(["g15", "led", "speed", String(Math.round(value))])
+    pendingSpeed = Math.round(value)
+    apply_argv(["g15", "led", "speed", String(pendingSpeed)])
   }
 
   // The CLI takes the whole list and enforces the per-effect min/max itself,
@@ -127,7 +157,8 @@ Panel {
   }
 
   function setBrightness(percent) {
-    apply_argv(["g15", "led", "brightness", String(Math.round(percent))])
+    pendingBrightness = Math.round(percent)
+    apply_argv(["g15", "led", "brightness", String(pendingBrightness)])
   }
 
   Process {
@@ -141,9 +172,12 @@ Panel {
 
   Process {
     id: actionProc
-    // The CLI writes the state file before exiting, so the next read already
-    // reflects the change.
-    onExited: root.refresh()
+    // The change is in effect by the time the CLI exits, so the next read
+    // already reflects it.
+    onExited: {
+      root.awaitingRefresh = true
+      root.refresh()
+    }
   }
 
   // hyprpicker overlays the screen and prints the color it is clicked on. The
@@ -268,7 +302,7 @@ Panel {
 
           ButtonGroup {
             options: Model.powerOptions()
-            value: root.status.power
+            value: root.pendingPower !== "" ? root.pendingPower : root.status.power
             foreground: root.foreground
             background: root.bar ? root.bar.background : Color.background
             accent: Color.accent
@@ -284,7 +318,7 @@ Panel {
             minimum: 0
             maximum: 100
             step: 5
-            value: root.status.boost
+            value: root.pendingBoost >= 0 ? root.pendingBoost : root.status.boost
             suffix: "%"
             // The mode chips drive the fan curve; this is the manual boost on
             // top of it. Shown from the state file — reading the live value
@@ -324,7 +358,7 @@ Panel {
             minimum: 0
             maximum: 100
             step: 5
-            value: root.status.brightness
+            value: root.pendingBrightness >= 0 ? root.pendingBrightness : root.status.brightness
             suffix: "%"
             // Applied on release, not on every drag tick: each write is a USB
             // control transfer to the LED controller.
@@ -333,7 +367,7 @@ Panel {
 
           ButtonGroup {
             options: Model.effectOptions()
-            value: root.status.effect
+            value: root.pendingEffect !== "" ? root.pendingEffect : root.status.effect
             foreground: root.foreground
             background: root.bar ? root.bar.background : Color.background
             accent: Color.accent
@@ -351,7 +385,7 @@ Panel {
             maximum: 10
             step: 1
             integer: true
-            value: root.status.speed
+            value: root.pendingSpeed >= 0 ? root.pendingSpeed : root.status.speed
             onCommitted: function(v) { root.setSpeed(v) }
           }
 

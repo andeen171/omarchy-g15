@@ -58,8 +58,10 @@ and `rescanPlugins` after pulling.
 
 ## Privileges
 
-Reading needs nothing — temperatures, fan speeds **and the current fan boost**
-all come from hwmon, and the rest from `~/.config/g15/state`. LED writes go
+Reading needs nothing. Temperatures, fan speeds and the fan boost come from
+hwmon; the power mode comes from the alienware-wmi driver's platform profile,
+so it stays right even when something other than this widget changes it. Only
+the backlight's own settings come from `~/.config/g15/state`. LED writes go
 over USB and need only the udev rule the CLI ships.
 
 **Power modes and fan boost need root** (they go through the `acpi_call` WMI),
