@@ -78,19 +78,29 @@ The `rootCommand` setting is split on whitespace into a command, not passed to
 a shell, so a different wrapper (`doas /usr/bin/g15`, `sudo -n g15`) is a
 setting change and nothing more.
 
-Install the action the CLI ships (the `g15-cli` package does this for you) so
-the prompt names what it is about to do and caches for a few minutes instead of
-asking once per slider drag:
+The `g15-cli` package installs a polkit action, so the prompt names the
+operation and caches for a few minutes rather than asking once per slider drag.
+Check it arrived:
 
 ```sh
-sudo install -Dm644 org.andeen171.g15.policy \
-  /usr/share/polkit-1/actions/org.andeen171.g15.policy
 pkaction --action-id org.andeen171.g15.control --verbose
 ```
 
 Without it `pkexec` still works, falling back to
 `org.freedesktop.policykit.exec` — which prompts every single time and names
 the binary rather than the operation.
+
+If you built the CLI yourself instead of installing the package, install the
+action by hand from the CLI repo:
+
+```sh
+sudo install -Dm644 org.andeen171.g15.policy \
+  /usr/share/polkit-1/actions/org.andeen171.g15.policy
+```
+
+Delete that hand-installed copy before you ever install the `g15-cli` package.
+pacman will not overwrite a file no package owns, and the upgrade fails with
+`org.andeen171.g15.policy exists in filesystem`.
 
 If a privileged call fails, the control snaps back to the real value on the
 next poll.
