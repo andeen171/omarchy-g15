@@ -8,8 +8,9 @@ import "Model.js" as Model
 // G15 — Dell G15 temps and fans in the bar, with a panel carrying everything
 // the TUI controls: power mode, fan boost, and the keyboard backlight.
 //
-// Reads go through `g15 status` (hwmon + ~/.config/g15/state only, never the
-// USB device), so polling can never wedge the AW-ELC controller. Writes go
+// Reads go through `g15 status` (hwmon, the driver's platform profile and
+// ~/.config/g15/state only, never the USB device), so polling can never wedge
+// the AW-ELC controller. Writes go
 // through the `g15` CLI, which owns the USB protocol.
 Panel {
   id: root
