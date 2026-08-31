@@ -42,7 +42,7 @@
         "type": "string",
         "label": "Privileged g15 command",
         "defaultValue": "pkexec /usr/bin/g15",
-        "description": "Prefixed to `power <mode>` and `fan boost <n>`, which need root. pkexec asks for a password through the shell's polkit dialog; `sudo -n g15` works too if you would rather whitelist it."
+        "description": "Run for `power <mode>` and `fan boost <n>`, which need root. Split on spaces into a command, so a wrapper like `doas /usr/bin/g15` works too. pkexec asks for a password through the shell's polkit dialog."
       },
       {
         "key": "tuiCommand",

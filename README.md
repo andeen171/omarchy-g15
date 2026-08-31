@@ -17,8 +17,8 @@ the power mode and the RGB keyboard backlight.
 
 ## Requires
 
-The [`g15` CLI](https://github.com/andeen171/g15-cli) on `PATH` (`yay -S g15`).
-The widget only ever runs:
+The [`g15` CLI](https://github.com/andeen171/g15-cli), 0.3.0 or newer, on
+`PATH` (`yay -S g15-cli`). The widget only ever runs:
 
 | Action | Command |
 |---|---|
@@ -34,27 +34,31 @@ The widget only ever runs:
 `hyprpicker` is optional — without it the picker's *Screen* button does
 nothing, and everything else still works.
 
-Polling reads hwmon and `~/.config/g15/state` only — never the USB LED device,
-which must not be opened concurrently.
+Polling reads hwmon, the alienware-wmi driver's platform profile, and
+`~/.config/g15/state` — never the USB LED device, which must not be opened
+concurrently.
 
 ## Install
 
-This plugin lives in a subdirectory of the [g15-cli](https://github.com/andeen171/g15-cli)
-repo, so `omarchy plugin add <repo-url>` does **not** work on it — that command
-expects the repository root to be the plugin. Install by copy (the shell only
-loads plugins from `~/.config/omarchy/plugins/`, and refuses symlinked plugin
-directories):
-
 ```sh
-git clone https://github.com/andeen171/g15-cli.git
-cp -r g15-cli/omarchy-plugin ~/.config/omarchy/plugins/io.github.andeen171.g15
-omarchy plugin validate ~/.config/omarchy/plugins/io.github.andeen171.g15
-omarchy-shell shell rescanPlugins
-omarchy plugin enable io.github.andeen171.g15 left
+omarchy plugin add https://github.com/andeen171/omarchy-g15.git --enable
 ```
 
-Because it is a copy, `git pull` does not update the widget — re-run the `cp`
-and `rescanPlugins` after pulling.
+Then place it with `omarchy plugin enable io.github.andeen171.g15 left` (or
+`right`/`center`), or from Setup > Plugins.
+
+## Removing
+
+```sh
+omarchy plugin disable io.github.andeen171.g15
+rm -rf ~/.config/omarchy/plugins/io.github.andeen171.g15
+omarchy restart shell
+```
+
+Nothing is left behind outside that directory: the plugin's own settings live
+in the widget's `~/.config/omarchy/shell.json` entry, which `disable` removes,
+and it never writes anywhere else. The `g15` CLI, its udev rule and its polkit
+action are the CLI package's, and stay until you uninstall that.
 
 ## Privileges
 
@@ -70,6 +74,10 @@ agent, so that surfaces as its own password dialog — nothing has to be
 whitelisted in sudoers, and the authorization is asked for at the moment it is
 used rather than granted forever.
 
+The `rootCommand` setting is split on whitespace into a command, not passed to
+a shell, so a different wrapper (`doas /usr/bin/g15`, `sudo -n g15`) is a
+setting change and nothing more.
+
 Install the action the CLI ships (the `g15-cli` package does this for you) so
 the prompt names what it is about to do and caches for a few minutes instead of
 asking once per slider drag:
@@ -84,19 +92,8 @@ Without it `pkexec` still works, falling back to
 `org.freedesktop.policykit.exec` — which prompts every single time and names
 the binary rather than the operation.
 
-Prefer a passwordless setup? Point the widget's `rootCommand` setting at
-`sudo -n g15` and add the sudoers entries yourself:
-
-```sh
-sudo tee /etc/sudoers.d/g15-panel <<EOF
-$USER ALL=(root) NOPASSWD: /usr/bin/g15 power *
-$USER ALL=(root) NOPASSWD: /usr/bin/g15 fan boost *
-EOF
-sudo chmod 440 /etc/sudoers.d/g15-panel
-```
-
-Either way, if the privileged call fails the control simply snaps back to the
-real value on the next poll.
+If a privileged call fails, the control snaps back to the real value on the
+next poll.
 
 ## Developing
 
@@ -116,41 +113,23 @@ qs log -p /usr/share/omarchy/shell --tail 100   # QML errors land here
 `omarchy-shell shell summon io.github.andeen171.g15 '{}'` opens the panel
 without clicking the bar, which is handy for screenshotting a state.
 
-## Packaging: why this is not its own repo yet
-
-Deliberate, for now. The widget and the CLI ship one contract (`g15 status`,
-`g15 led effect`, …), and while both are changing every commit, keeping them in
-one repo means one commit, one PR, and one place where a contract break shows
-up. The cost is the copy-install above and no marketplace listing.
-
-Everything else is already publish-shaped: reverse-DNS id, no `clonedFrom` in
-the manifest, its own README and LICENSE, no files referenced outside this
-directory. When the contract settles, splitting it out is:
-
-```sh
-git subtree split --prefix omarchy-plugin -b g15-omarchy-plugin
-# push that branch as the root of a new repo, then
-omarchy plugin add https://github.com/andeen171/omarchy-g15.git --enable
-```
-
-Nothing inside the plugin changes; only the repo's README install steps and the
-version handshake (the plugin would then declare a minimum `g15` CLI version
-rather than moving in lockstep with it). Submission after that is the
-[marketplace issue template](https://github.com/HANCORE-linux/omarchy-plugin-marketplace),
-which wants the external dependency (the `g15` CLI), the privilege boundary
-(sudo for power modes), and a `preview.png`.
-
 ## History
+
+This plugin was developed inside the
+[g15-cli](https://github.com/andeen171/g15-cli) repo, under `omarchy-plugin/`,
+until the CLI contract it depends on (`g15 status`, `g15 led effect`, …)
+settled. `git subtree split` moved it here with that history intact, so the
+commits below the split still describe the same files.
 
 `Widget.qml` (plugin `andeen171.g15`, g15-cli 0.2.0) was the first version: a
 `BarWidget` that polled `g15 waybar` for a text label and ran the TUI on click,
 a straight port of the Waybar custom module Omarchy 3 used before the shell
-replaced Waybar. It is gone from the working tree — `git show <ref>:omarchy-plugin/Widget.qml`
+replaced Waybar. It is gone from the working tree — `git show <ref>:Widget.qml`
 — because `Panel.qml` is a superset: same readout, same click-to-TUI (now on
-right click), plus the controls. The old widget stays in the repo history as
-the minimal example of a `bar-widget` plugin, and the plain `shell.json`
-command-module fallback for it is still documented in the
-[main README](../README.md).
+right click), plus the controls. It stays in the history as the minimal example
+of a `bar-widget` plugin, and the plain `shell.json` command-module fallback
+for it is still documented in the
+[CLI's README](https://github.com/andeen171/g15-cli#readme).
 
 ## License
 

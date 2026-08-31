@@ -93,16 +93,22 @@ Panel {
     actionProc.running = true
   }
 
-  // rootCommand is a user-editable setting (sudo wrapper, doas, ...), so these
-  // build a shell string; the arguments are ours, never the state file's.
+  // rootCommand is a user-editable setting (sudo wrapper, doas, ...). Split it
+  // on whitespace into argv rather than handing it to a shell — a privilege
+  // wrapper needs no shell, and this way nothing here can be word-split or
+  // glob-expanded on its way to root.
+  function rootArgv(args) {
+    return root.rootCommand.trim().split(/\s+/).filter(w => w.length).concat(args)
+  }
+
   function setPower(mode) {
     pendingPower = mode
-    apply_argv(["bash", "-lc", root.rootCommand + " power " + mode])
+    apply_argv(rootArgv(["power", mode]))
   }
 
   function setBoost(percent) {
     pendingBoost = Math.round(percent)
-    apply_argv(["bash", "-lc", root.rootCommand + " fan boost " + pendingBoost])
+    apply_argv(rootArgv(["fan", "boost", String(pendingBoost)]))
   }
 
   function setEffect(name) {
