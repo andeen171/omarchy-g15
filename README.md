@@ -17,14 +17,17 @@ the power mode and the RGB keyboard backlight.
 
 ## Requires
 
-The [`g15` CLI](https://github.com/andeen171/g15-cli), 0.3.0 or newer, on
-`PATH` (`yay -S g15-cli`). The widget only ever runs:
+The [`g15` CLI](https://github.com/andeen171/g15-cli), **0.3.1 or newer**, on
+`PATH` (`yay -S g15-cli`). The version is checked at every poll — `g15 status`
+reports it — and below 0.3.1 the power and fan controls disable themselves and
+say so, because the privilege narrowing described under
+[Privileges](#privileges) lives in the CLI. The widget only ever runs:
 
 | Action | Command |
 |---|---|
 | poll | `g15 status` |
-| power mode | `pkexec /usr/bin/g15 power <mode>` (configurable) |
-| fan boost | `pkexec /usr/bin/g15 fan boost <0-100>` (same setting) |
+| power mode | `pkexec /usr/bin/g15 power <mode>` |
+| fan boost | `pkexec /usr/bin/g15 fan boost <0-100>` |
 | brightness | `g15 led brightness <0-100>` |
 | effect | `g15 led effect <name>` |
 | speed | `g15 led speed <1-10>` |
@@ -74,21 +77,32 @@ agent, so that surfaces as its own password dialog — nothing has to be
 whitelisted in sudoers, and the authorization is asked for at the moment it is
 used rather than granted forever.
 
-The `rootCommand` setting is split on whitespace into a command, not passed to
-a shell, so a different wrapper (`doas /usr/bin/g15`, `sudo -n g15`) is a
-setting change and nothing more.
+Three things keep that grant as small as the two operations above:
 
-The `g15-cli` package installs a polkit action, so the prompt names the
-operation and caches for a few minutes rather than asking once per slider drag.
-Check it arrived:
+- **The wrapper and the target are pinned, not settings.** The widget runs
+  `pkexec` on the absolute path `/usr/bin/g15` — the same path the polkit action
+  names, owned by the `g15-cli` package. Neither half is configurable, so no
+  edit to the bar's config can redirect a privileged call at another binary.
+  Wanting `doas` instead means editing `rootPrefix` in `Panel.qml`.
+- **The CLI refuses the rest of itself.** polkit pins an executable but cannot
+  filter its arguments, so `g15` narrows the grant from the inside: when it sees
+  `PKEXEC_UID` it runs `power <mode>` and `fan boost <0-100>` and nothing else.
+  `sudo g15 …` and a root shell are unaffected. This is what the 0.3.1 floor is
+  for; the widget will not use the privileged path without it.
+- **Nothing is retained.** The polkit action is `auth_admin`, not
+  `auth_admin_keep`, so every privileged call authenticates. Dragging the fan
+  slider asks again; that is the trade for never leaving a live authorization
+  sitting around.
+
+Check the action arrived:
 
 ```sh
 pkaction --action-id org.andeen171.g15.control --verbose
 ```
 
 Without it `pkexec` still works, falling back to
-`org.freedesktop.policykit.exec` — which prompts every single time and names
-the binary rather than the operation.
+`org.freedesktop.policykit.exec` — which names the binary rather than the
+operation. The CLI-side narrowing above applies either way.
 
 If you built the CLI yourself instead of installing the package, install the
 action by hand from the CLI repo:

@@ -21,9 +21,14 @@ Panel {
   readonly property bool showValues: setting("showValues", true) === true
   // Power modes and fan boost go through WMAX, which needs root; LED control
   // does not. pkexec hands that to the desktop's polkit agent — the shell's own
-  // password dialog — so nothing has to be whitelisted in sudoers. Point this
-  // at `sudo -n g15` instead if a passwordless rule is what you want.
-  readonly property string rootCommand: setting("rootCommand", "pkexec /usr/bin/g15")
+  // password dialog — so nothing has to be whitelisted in sudoers.
+  //
+  // Both halves are pinned, not settings: the wrapper is pkexec and the target
+  // is the absolute, package-owned path the polkit action names. A configurable
+  // wrapper would let the bar's own config file redirect a privileged call at
+  // some other executable, and there is no way for this widget to check what it
+  // was redirected to. Anyone who wants doas can edit this line in their fork.
+  readonly property var rootPrefix: ["pkexec", "/usr/bin/g15"]
   readonly property string tuiCommand: setting("tuiCommand", "omarchy-launch-or-focus-tui g15-tui")
 
   property var status: Model.emptyStatus()
@@ -93,20 +98,25 @@ Panel {
     actionProc.running = true
   }
 
-  // rootCommand is a user-editable setting (sudo wrapper, doas, ...). Split it
-  // on whitespace into argv rather than handing it to a shell — a privilege
-  // wrapper needs no shell, and this way nothing here can be word-split or
-  // glob-expanded on its way to root.
   function rootArgv(args) {
-    return root.rootCommand.trim().split(/\s+/).filter(w => w.length).concat(args)
+    return root.rootPrefix.concat(args)
   }
 
+  // The privileged path is only as narrow as the CLI on the other side of
+  // pkexec: it is g15 itself that refuses anything but these two commands when
+  // it sees PKEXEC_UID, and that check landed in 0.3.1. An older g15 on PATH
+  // means the polkit grant is wider than this widget documents, so don't use
+  // it — the controls disable themselves and the panel says why.
+  readonly property bool rootUsable: Model.atLeast(status.version, Model.minCliVersion)
+
   function setPower(mode) {
+    if (!rootUsable) return
     pendingPower = mode
     apply_argv(rootArgv(["power", mode]))
   }
 
   function setBoost(percent) {
+    if (!rootUsable) return
     pendingBoost = Math.round(percent)
     apply_argv(rootArgv(["fan", "boost", String(pendingBoost)]))
   }
@@ -168,9 +178,27 @@ Panel {
     apply_argv(["g15", "led", "brightness", String(pendingBrightness)])
   }
 
+  // A hung child would otherwise sit there forever holding the single-flight
+  // guard, and the panel would freeze on its last sample with no way back.
+  // Every process here gets a deadline; `running = false` terminates it.
+  Timer {
+    id: statusDeadline
+    interval: 10000
+    onTriggered: statusProc.running = false
+  }
+
+  Timer {
+    id: actionDeadline
+    // Generous: a pkexec call is only done when the user has answered the
+    // password prompt, and they may take a while to find the keyboard.
+    interval: 120000
+    onTriggered: actionProc.running = false
+  }
+
   Process {
     id: statusProc
     command: ["g15", "status"]
+    onRunningChanged: statusDeadline.running = running
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.apply(text)
@@ -179,6 +207,7 @@ Panel {
 
   Process {
     id: actionProc
+    onRunningChanged: actionDeadline.running = running
     // The change is in effect by the time the CLI exits, so the next read
     // already reflects it.
     onExited: {
@@ -189,7 +218,9 @@ Panel {
 
   // hyprpicker overlays the screen and prints the color it is clicked on. The
   // shell already runs as the user, so unlike the TUI this needs no env
-  // reconstruction.
+  // reconstruction. No deadline: it is done when the user clicks, and a timer
+  // that kills it would just be a timer that cancels their color pick. Escape
+  // exits it, and it is unprivileged.
   Process {
     id: pickProc
     command: ["hyprpicker", "--format=hex"]
@@ -316,11 +347,15 @@ Panel {
             fontFamily: root.fontFamily
             fontSize: Style.font.caption
             focusable: false
+            enabled: root.rootUsable
+            opacity: root.rootUsable ? 1 : 0.4
             onChanged: function(v) { root.setPower(v) }
           }
 
           SliderRow {
             width: parent.width
+            enabled: root.rootUsable
+            opacity: root.rootUsable ? 1 : 0.4
             label: Model.fanIcon()
             minimum: 0
             maximum: 100
@@ -335,7 +370,19 @@ Panel {
           }
 
           Text {
-            visible: root.status.power === "unknown"
+            visible: !root.rootUsable
+            width: parent.width
+            text: "g15 " + Model.minCliVersion + " or newer needed for these two controls "
+                + "(found " + root.status.version + ") — upgrade with `yay -S g15-cli`"
+            color: root.foreground
+            opacity: 0.5
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.WordWrap
+          }
+
+          Text {
+            visible: root.rootUsable && root.status.power === "unknown"
             width: parent.width
             text: "unknown until a mode is set once (needs root — see README)"
             color: root.foreground

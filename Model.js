@@ -1,8 +1,21 @@
 // Parsing and formatting for the G15 bar widget. The JSON contract with
 // `g15 status` lives here so Panel.qml stays layout.
 
+// The oldest g15 whose pkexec path refuses everything but `power <mode>` and
+// `fan boost <n>`. Below this the privileged controls stay disabled.
+var minCliVersion = "0.3.1"
+
+// `g15 status` is one line of JSON from a local CLI, not a network peer — but
+// it is still a producer this widget does not control (wrong g15 on PATH, a
+// half-written pipe), and every value below lands in a bar that has to keep
+// painting. Bound the read rather than trusting the shape.
+var MAX_RAW = 64 * 1024
+var MAX_COLORS = 64
+var MAX_TEXT = 32
+
 function emptyStatus() {
   return {
+    version: "0",
     sensors: false,
     cpu: 0, gpu: 0, fan1: 0, fan2: 0,
     power: "unknown",
@@ -21,32 +34,54 @@ function emptyStatus() {
 // gone) leaves the last good sample in place — see Panel.qml's apply().
 function parseStatus(raw) {
   var s = emptyStatus()
+  var text = String(raw || "")
+  // Parsing is O(n) but the strings it produces get held and drawn, so cap the
+  // input instead of discovering the size afterwards.
+  if (text.length > MAX_RAW) return null
   var json
   try {
-    json = JSON.parse(String(raw || "").trim())
+    json = JSON.parse(text.trim())
   } catch (e) {
     return null
   }
   if (!json || typeof json !== "object") return null
 
+  s.version = word(json.version)
   s.sensors = json.sensors === true
   s.cpu = num(json.cpu)
   s.gpu = num(json.gpu)
   s.fan1 = num(json.fan1)
   s.fan2 = num(json.fan2)
-  s.power = json.power ? String(json.power) : "unknown"
-  s.effect = json.effect ? String(json.effect) : "static"
+  s.power = word(json.power) || "unknown"
+  s.effect = word(json.effect) || "static"
   s.boost = Math.max(0, Math.min(100, num(json.boost)))
   s.brightness = Math.max(0, Math.min(100, num(json.brightness)))
   s.speed = Math.max(1, Math.min(10, num(json.speed) || 5))
   s.color = isHex(json.color) ? "#" + json.color : "#ffffff"
-  s.minColors = Math.max(1, num(json.minColors) || 1)
-  s.maxColors = Math.max(s.minColors, num(json.maxColors) || s.minColors)
+  s.minColors = Math.min(MAX_COLORS, Math.max(1, num(json.minColors) || 1))
+  s.maxColors = Math.min(MAX_COLORS, Math.max(s.minColors, num(json.maxColors) || s.minColors))
   s.colors = (Array.isArray(json.colors) ? json.colors : [])
+    .slice(0, MAX_COLORS)
     .filter(isHex)
     .map(function (c) { return "#" + String(c).toLowerCase() })
   if (s.colors.length === 0) s.colors = [s.color]
   return s
+}
+
+// A short, printable token — these end up as bar and tooltip text, and a
+// megabyte of one of them is a broken bar, not a broken string.
+function word(v) {
+  return /^[\w.+-]{1,32}$/.test(String(v)) ? String(v).slice(0, MAX_TEXT) : ""
+}
+
+// Dotted numeric compare, missing parts read as 0. "0.3.10" > "0.3.9".
+function atLeast(have, want) {
+  var a = String(have || "").split("."), b = String(want || "").split(".")
+  for (var i = 0; i < Math.max(a.length, b.length); i++) {
+    var x = parseInt(a[i], 10) || 0, y = parseInt(b[i], 10) || 0
+    if (x !== y) return x > y
+  }
+  return true
 }
 
 function isHex(v) {

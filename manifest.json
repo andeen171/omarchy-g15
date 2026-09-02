@@ -17,7 +17,6 @@
     "defaults": {
       "refreshIntervalSec": 5,
       "showValues": true,
-      "rootCommand": "pkexec /usr/bin/g15",
       "tuiCommand": "omarchy-launch-or-focus-tui g15-tui"
     },
     "schema": [
@@ -36,13 +35,6 @@
         "label": "Show temperatures in the bar",
         "defaultValue": true,
         "description": "Off shows the keyboard glyph instead; the panel still has everything."
-      },
-      {
-        "key": "rootCommand",
-        "type": "string",
-        "label": "Privileged g15 command",
-        "defaultValue": "pkexec /usr/bin/g15",
-        "description": "Run for `power <mode>` and `fan boost <n>`, which need root. Split on spaces into a command, so a wrapper like `doas /usr/bin/g15` works too. pkexec asks for a password through the shell's polkit dialog."
       },
       {
         "key": "tuiCommand",

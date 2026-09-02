@@ -17,6 +17,24 @@ assert.strictEqual(parseStatus('{"brightness":900}').brightness, 100)
 assert.strictEqual(parseStatus('{"boost":-5}').boost, 0)
 assert.deepStrictEqual(parseStatus('{"colors":["ff0000","nope"]}').colors, ["#ff0000"])
 
+// Bounds: an oversized or overlong producer cannot reach the bar.
+assert.strictEqual(parseStatus('{"sensors":true}'.padEnd(70000, " ")), null)
+assert.strictEqual(parseStatus('{"power":"' + "x".repeat(500) + '"}').power, "unknown")
+assert.strictEqual(parseStatus('{"effect":"a b"}').effect, "static")
+assert.strictEqual(
+  parseStatus('{"colors":' + JSON.stringify(Array(200).fill("ff0000")) + "}").colors.length,
+  64
+)
+assert.strictEqual(parseStatus('{"maxColors":9999}').maxColors, 64)
+
+// The privileged controls key off this compare, so it has to order right.
+assert.strictEqual(atLeast("0.3.1", minCliVersion), true)
+assert.strictEqual(atLeast("0.3.0", minCliVersion), false)
+assert.strictEqual(atLeast("0.3.10", "0.3.9"), true)
+assert.strictEqual(atLeast("1.0", "0.3.1"), true)
+assert.strictEqual(atLeast("", minCliVersion), false)
+assert.strictEqual(atLeast(parseStatus("{}").version, minCliVersion), false)
+
 // HSV is what the picker edits, hex is what the CLI takes.
 assert.strictEqual(hsvToHex(0, 100, 100), "#ff0000")
 assert.strictEqual(hsvToHex(210, 100, 100), "#0080ff")
@@ -27,6 +45,10 @@ assert.strictEqual(colorArg(["#ff0000", "#00ff00"]), "ff0000,00ff00")
 
 const live = parseStatus(execFileSync("g15", ["status"]).toString())
 assert.ok(live, "g15 status must print one JSON object")
+assert.ok(
+  atLeast(live.version, minCliVersion),
+  "g15 on PATH is " + live.version + ", need " + minCliVersion + " for the pkexec narrowing"
+)
 assert.ok(live.sensors, "hwmon unreadable — is alienware_wmi/dell_smm loaded?")
 assert.ok(live.cpu > 0 && live.gpu > 0, "temps must be non-zero")
 assert.ok(tempFraction(30) === 0 && tempFraction(95) === 1, "meter spans 30..95")
