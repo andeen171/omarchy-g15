@@ -17,22 +17,32 @@ the power mode and the RGB keyboard backlight.
 
 ## Requires
 
-The [`g15` CLI](https://github.com/andeen171/g15-cli), **0.3.1 or newer**, on
-`PATH` (`yay -S g15-cli`). The version is checked at every poll — `g15 status`
-reports it — and below 0.3.1 the power and fan controls disable themselves and
-say so, because the privilege narrowing described under
-[Privileges](#privileges) lives in the CLI. The widget only ever runs:
+The [`g15` CLI](https://github.com/andeen171/g15-cli), **0.3.1 or newer**, as
+`/usr/bin/g15` (`yay -S g15-cli`). The widget never looks the binary up on
+`PATH`: every call, privileged or not, goes to that one absolute path, so the
+version it checks is the version that receives the privileged commands. The
+version is checked at every poll — `g15 status` reports it — and below 0.3.1
+the power and fan controls disable themselves and say so, because the
+privilege narrowing described under [Privileges](#privileges) lives in the CLI.
+The widget only ever runs:
 
-| Action | Command |
-|---|---|
-| poll | `g15 status` |
-| power mode | `pkexec /usr/bin/g15 power <mode>` |
-| fan boost | `pkexec /usr/bin/g15 fan boost <0-100>` |
-| brightness | `g15 led brightness <0-100>` |
-| effect | `g15 led effect <name>` |
-| speed | `g15 led speed <1-10>` |
-| colors | `g15 led colors RRGGBB[,RRGGBB...]` |
-| eyedropper | `hyprpicker --format=hex` |
+| Action | Command | Deadline |
+|---|---|---|
+| poll | `/usr/bin/g15 status` | 10 s |
+| power mode | `pkexec /usr/bin/g15 power <mode>` | 120 s |
+| fan boost | `pkexec /usr/bin/g15 fan boost <0-100>` | 120 s |
+| brightness | `/usr/bin/g15 led brightness <0-100>` | 120 s |
+| effect | `/usr/bin/g15 led effect <name>` | 120 s |
+| speed | `/usr/bin/g15 led speed <1-10>` | 120 s |
+| colors | `/usr/bin/g15 led colors RRGGBB[,RRGGBB...]` | 120 s |
+| eyedropper | `hyprpicker --format=hex` | 60 s, or the *Cancel* button |
+
+Each of those is wrapped as `timeout -k 5 <deadline> bash -o pipefail -c 'exec
+"$@" | head -c <cap>'`: `timeout` leads the process group and signals all of
+it — grandchildren included — on the deadline or when the widget stops the
+process, and `head` caps what reaches the widget (64 KiB for `status`, 64 bytes
+for the picker) before it is buffered. The arguments travel as positional
+parameters, never through the shell.
 
 `hyprpicker` is optional — without it the picker's *Screen* button does
 nothing, and everything else still works.

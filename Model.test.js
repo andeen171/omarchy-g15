@@ -1,5 +1,6 @@
 // node Model.test.js — guards the `g15 status` JSON contract Panel.qml reads.
-// Needs the g15 CLI on PATH; that is the contract being checked.
+// Needs the g15 CLI at /usr/bin/g15, the path Panel.qml uses; that is the
+// contract being checked.
 const fs = require("fs")
 const assert = require("assert")
 const { execFileSync } = require("child_process")
@@ -43,11 +44,11 @@ var hsv = hexToHsv("#0080ff")
 assert.ok(Math.abs(hsv.h - 210) < 0.5 && hsv.s === 100 && hsv.v === 100)
 assert.strictEqual(colorArg(["#ff0000", "#00ff00"]), "ff0000,00ff00")
 
-const live = parseStatus(execFileSync("g15", ["status"]).toString())
+const live = parseStatus(execFileSync("/usr/bin/g15", ["status"]).toString())
 assert.ok(live, "g15 status must print one JSON object")
 assert.ok(
   atLeast(live.version, minCliVersion),
-  "g15 on PATH is " + live.version + ", need " + minCliVersion + " for the pkexec narrowing"
+  "/usr/bin/g15 is " + live.version + ", need " + minCliVersion + " for the pkexec narrowing"
 )
 assert.ok(live.sensors, "hwmon unreadable — is alienware_wmi/dell_smm loaded?")
 assert.ok(live.cpu > 0 && live.gpu > 0, "temps must be non-zero")

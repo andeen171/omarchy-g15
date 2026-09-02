@@ -28,7 +28,11 @@ Panel {
   // wrapper would let the bar's own config file redirect a privileged call at
   // some other executable, and there is no way for this widget to check what it
   // was redirected to. Anyone who wants doas can edit this line in their fork.
-  readonly property var rootPrefix: ["pkexec", "/usr/bin/g15"]
+  // One binary for everything, privileged or not. The version that gates the
+  // privileged controls is read from the same file that receives them; a newer
+  // g15 shadowing PATH could otherwise vouch for an older /usr/bin/g15.
+  readonly property string g15: "/usr/bin/g15"
+  readonly property var rootPrefix: ["pkexec", g15]
   readonly property string tuiCommand: setting("tuiCommand", "omarchy-launch-or-focus-tui g15-tui")
 
   property var status: Model.emptyStatus()
@@ -94,8 +98,21 @@ Panel {
   // the state file can be re-tokenized.
   function apply_argv(argv) {
     if (actionProc.running) return
-    actionProc.command = argv
+    // Generous: a pkexec call is only done when the user has answered the
+    // password prompt, and they may take a while to find the keyboard.
+    actionProc.command = bounded(120, 4096, argv)
     actionProc.running = true
+  }
+
+  // ponytail: coreutils do the bounding. `timeout` makes itself the process
+  // group leader and, on its deadline or on the SIGTERM that `running = false`
+  // sends it, signals the whole group (SIGKILL 5 s later), so children of the
+  // child die too. `head -c` caps stdout before it reaches the collector and
+  // SIGPIPEs a producer that keeps going. pipefail keeps the producer's exit
+  // status. argv travels as positional parameters, never through the shell.
+  function bounded(seconds, cap, argv) {
+    return ["timeout", "-k", "5", String(seconds),
+            "bash", "-o", "pipefail", "-c", 'exec "$@" | head -c ' + cap, "_"].concat(argv)
   }
 
   function rootArgv(args) {
@@ -125,18 +142,18 @@ Panel {
     pickerOpen = false
     selectedColor = 0
     pendingEffect = name
-    apply_argv(["g15", "led", "effect", name])
+    apply_argv([root.g15, "led", "effect", name])
   }
 
   function setSpeed(value) {
     pendingSpeed = Math.round(value)
-    apply_argv(["g15", "led", "speed", String(pendingSpeed)])
+    apply_argv([root.g15, "led", "speed", String(pendingSpeed)])
   }
 
   // The CLI takes the whole list and enforces the per-effect min/max itself,
   // so every edit here is a rewrite of the current effect's list.
   function setColors(list) {
-    apply_argv(["g15", "led", "colors", Model.colorArg(list)])
+    apply_argv([root.g15, "led", "colors", Model.colorArg(list)])
   }
 
   function openPicker(index) {
@@ -175,30 +192,15 @@ Panel {
 
   function setBrightness(percent) {
     pendingBrightness = Math.round(percent)
-    apply_argv(["g15", "led", "brightness", String(pendingBrightness)])
+    apply_argv([root.g15, "led", "brightness", String(pendingBrightness)])
   }
 
   // A hung child would otherwise sit there forever holding the single-flight
   // guard, and the panel would freeze on its last sample with no way back.
-  // Every process here gets a deadline; `running = false` terminates it.
-  Timer {
-    id: statusDeadline
-    interval: 10000
-    onTriggered: statusProc.running = false
-  }
-
-  Timer {
-    id: actionDeadline
-    // Generous: a pkexec call is only done when the user has answered the
-    // password prompt, and they may take a while to find the keyboard.
-    interval: 120000
-    onTriggered: actionProc.running = false
-  }
-
+  // Every process here goes through bounded(): a deadline and an output cap.
   Process {
     id: statusProc
-    command: ["g15", "status"]
-    onRunningChanged: statusDeadline.running = running
+    command: root.bounded(10, 65536, [root.g15, "status"])
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.apply(text)
@@ -207,7 +209,6 @@ Panel {
 
   Process {
     id: actionProc
-    onRunningChanged: actionDeadline.running = running
     // The change is in effect by the time the CLI exits, so the next read
     // already reflects it.
     onExited: {
@@ -218,12 +219,11 @@ Panel {
 
   // hyprpicker overlays the screen and prints the color it is clicked on. The
   // shell already runs as the user, so unlike the TUI this needs no env
-  // reconstruction. No deadline: it is done when the user clicks, and a timer
-  // that kills it would just be a timer that cancels their color pick. Escape
-  // exits it, and it is unprivileged.
+  // reconstruction. Interactive, but not open-ended: a minute to click, the
+  // *Screen* button cancels it while it runs, and Escape exits it.
   Process {
     id: pickProc
-    command: ["hyprpicker", "--format=hex"]
+    command: root.bounded(60, 64, ["hyprpicker", "--format=hex"])
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -661,15 +661,15 @@ Panel {
                 spacing: Style.space(6)
 
                 Button {
-                  text: "Screen"
-                  tooltipText: "Pick a color from the screen (hyprpicker)"
+                  text: pickProc.running ? "Cancel" : "Screen"
+                  tooltipText: pickProc.running ? "Stop picking" : "Pick a color from the screen (hyprpicker)"
                   foreground: root.foreground
                   fontFamily: root.fontFamily
                   fontSize: Style.font.caption
                   horizontalPadding: Style.spacing.controlPaddingX
                   verticalPadding: Style.space(4)
                   bordered: true
-                  onClicked: if (!pickProc.running) pickProc.running = true
+                  onClicked: pickProc.running = !pickProc.running
                 }
 
                 Button {
