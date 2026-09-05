@@ -1,4 +1,4 @@
-# G15 — Omarchy bar plugin
+# Dell G15 CLI — Omarchy bar plugin
 
 Dell G15 (5520) CPU/GPU temperatures and fan rpm in the [Omarchy](https://omarchy.org)
 bar, with a panel for the two things you would otherwise open a terminal for:
