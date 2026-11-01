@@ -18,7 +18,7 @@ the power mode and the RGB keyboard backlight.
 ## Requires
 
 The [`g15` CLI](https://github.com/andeen171/g15-cli), **0.3.1 or newer**, as
-`/usr/bin/g15` (`yay -S g15-cli`). The widget never looks the binary up on
+`/usr/bin/g15` (`yay -S g15-cli`). If it is missing or too old the panel shows an *Install g15 CLI* button, which runs `omarchy-pkg-aur-add g15-cli` in Omarchy's floating terminal. The widget never looks the binary up on
 `PATH`: every call, privileged or not, goes to that one absolute path, so the
 version it checks is the version that receives the privileged commands. The
 version is checked at every poll — `g15 status` reports it — and below 0.3.1
@@ -35,6 +35,7 @@ The widget only ever runs:
 | effect | `/usr/bin/g15 led effect <name>` | 120 s |
 | speed | `/usr/bin/g15 led speed <1-10>` | 120 s |
 | colors | `/usr/bin/g15 led colors RRGGBB[,RRGGBB...]` | 120 s |
+| install (only when the CLI is missing/old, on click) | `omarchy-launch-floating-terminal-with-presentation "omarchy-pkg-aur-add g15-cli"` | none, interactive |
 | eyedropper | `hyprpicker --format=hex` | 60 s, or the *Cancel* button |
 
 Each of those is wrapped as `timeout -k 5 <deadline> bash -o pipefail -c 'exec

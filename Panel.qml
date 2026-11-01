@@ -239,6 +239,17 @@ Panel {
     }
   }
 
+  // Installs (or upgrades to) the AUR package in Omarchy's own floating
+  // terminal, so yay can ask for the sudo password and the user watches it.
+  // Fixed argv, deliberately not bounded(): the install is interactive and a
+  // deadline would kill the terminal mid-build.
+  Process {
+    id: installProc
+    command: ["omarchy-launch-floating-terminal-with-presentation",
+              "omarchy-pkg-aur-add g15-cli"]
+    onExited: root.refresh()
+  }
+
   Timer {
     interval: root.refreshIntervalSec * 1000
     running: true
@@ -323,6 +334,19 @@ Panel {
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
             elide: Text.ElideRight
+          }
+
+          Button {
+            visible: !root.rootUsable
+            text: installProc.running ? "Installing…" : "Install g15 CLI"
+            tooltipText: "Runs `omarchy-pkg-aur-add g15-cli` in a terminal"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            fontSize: Style.font.caption
+            horizontalPadding: Style.spacing.controlPaddingX
+            verticalPadding: Style.space(4)
+            bordered: true
+            onClicked: if (!installProc.running) installProc.running = true
           }
         }
 
