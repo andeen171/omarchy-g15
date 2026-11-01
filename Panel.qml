@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
 
@@ -70,7 +71,7 @@ Panel {
   }
 
   readonly property bool readoutsVisible: !button.vertical && showValues && status.sensors
-  readonly property color foreground: bar ? bar.foreground : Color.foreground
+  readonly property color foreground: bar ? bar.foreground : Commons.Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
   function refresh() {
@@ -318,7 +319,7 @@ Panel {
             visible: !root.status.sensors
             width: parent.width
             text: "no data — needs g15 0.3.0+ on PATH"
-            color: Color.urgent
+            color: Commons.Color.urgent
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
             elide: Text.ElideRight
@@ -342,8 +343,8 @@ Panel {
             options: Model.powerOptions()
             value: root.pendingPower !== "" ? root.pendingPower : root.status.power
             foreground: root.foreground
-            background: root.bar ? root.bar.background : Color.background
-            accent: Color.accent
+            background: root.bar ? root.bar.background : Commons.Color.background
+            accent: Commons.Color.accent
             fontFamily: root.fontFamily
             fontSize: Style.font.caption
             focusable: false
@@ -423,8 +424,8 @@ Panel {
             options: Model.effectOptions()
             value: root.pendingEffect !== "" ? root.pendingEffect : root.status.effect
             foreground: root.foreground
-            background: root.bar ? root.bar.background : Color.background
-            accent: Color.accent
+            background: root.bar ? root.bar.background : Commons.Color.background
+            accent: Commons.Color.accent
             fontFamily: root.fontFamily
             fontSize: Style.font.caption
             focusable: false
@@ -780,7 +781,7 @@ Panel {
       width: Style.space(40)
       text: row.temp > 0 ? row.temp + "°" : "—"
       horizontalAlignment: Text.AlignRight
-      color: Model.isHot(row.temp) ? Color.urgent : root.foreground
+      color: Model.isHot(row.temp) ? Commons.Color.urgent : root.foreground
       font.family: root.fontFamily
       font.pixelSize: Style.font.bodySmall
     }
@@ -800,7 +801,7 @@ Panel {
         width: parent.width * Model.tempFraction(row.temp)
         height: parent.height
         radius: parent.radius
-        color: Model.isHot(row.temp) ? Color.urgent : root.foreground
+        color: Model.isHot(row.temp) ? Commons.Color.urgent : root.foreground
         Behavior on width { NumberAnimation { duration: 200 } }
       }
     }

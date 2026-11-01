@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.andeen171.g15",
   "name": "Dell G15 CLI",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": "andeen171",
   "license": "MIT",
   "description": "Dell G15 CPU/GPU temps and fan rpm in the Omarchy bar, with a panel for power modes and the RGB keyboard backlight.",
